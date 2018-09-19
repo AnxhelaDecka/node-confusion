@@ -52,8 +52,8 @@ leaderRouter.route('/')
 })
 
 .put((req, res, next) => {
-  res.write('Updating the dish: ' + req.params.leaderId + '\n');
-  res.end('Will update the dish: ' + req.body.name + 
+  res.write('Updating the leader: ' + req.params.leaderId + '\n');
+  res.end('Will update the leader: ' + req.body.name + 
         ' with details: ' + req.body.description);
 })
 
