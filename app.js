@@ -9,9 +9,15 @@ const FileStore = require('session-file-store')(session);
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 
+var passport = require('passport');
+var authenticate = require('./authenticate');
+var config = require('./config')
+
 const dishRouter = require('./routes/dishRouter');
 const leaderRouter = require('./routes/leaderRouter');
 const promoRouter = require('./routes/promoRouter');
+const uploadRouter = require('./routes/uploadRouter');
+
 
 const mongoose = require('mongoose');
 
@@ -28,6 +34,16 @@ connect.then(() => {
 });
 
 var app = express();
+
+// Secure traffic only
+app.all('*', (req, res, next) => {
+  if (req.secure) {
+    return next();
+  }
+  else {
+    res.redirect(307, 'https://' + req.hostname + ':' + app.get('secPort') + req.url);
+  }
+});
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -49,7 +65,12 @@ app.use(session({
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
 
+app.use(passport.initialize());
+app.use(passport.session());
 app.use(auth);
+
+app.use('/imageUpload',uploadRouter);
+
 
 app.use([dishRouter, leaderRouter, promoRouter]);
 
@@ -71,20 +92,17 @@ app.use(function(err, req, res, next) {
 
 module.exports = app;
 
-function auth(req, res, next) {
-  if (req.session.user) {
-    if (req.session.user === 'authenticated') {
-      next();
-    } else {
-      let error = new Error('You are not authenticated!');
+function auth (req, res, next) {
+  console.log(req.user);
 
-      error.status = 403;
-      return next(error);
-    }
-  } else {
-    let error = new Error('You are not authenticated!');
-
-    error.status = 403;
-    return next(error);
+  if (!req.user) {
+    var err = new Error('You are not authenticated!');
+    res.setHeader('WWW-Authenticate', 'Basic');                          
+    err.status = 401;
+    next(err);
+  }
+  else {
+        next();
   }
 }
+

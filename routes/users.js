@@ -1,94 +1,76 @@
-'use strict';
-
 var express = require('express');
-var User = require('../models/user');
-
 var router = express.Router();
-router.use(express.json());
+const bodyParser = require('body-parser');
+var User = require('../models/user');
+var passport = require('passport');
+var authenticate = require('../authenticate');
+
+router.use(bodyParser.json());
 
 /* GET users listing. */
-router.get('/', function(req, res) {
-  User.find({})
-    .then((users) => {
-      res.status(200).json({
-        users: users
-      });
-    })
+router.get('/', authenticate.verifyUser, authenticate.verifyAdmin, function (req, res, next) {
+    User.find({})
+        .then((users) => {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.json(users);
+        }, (err) => { next(err) })
+        .catch((err) => next(err));
 });
 
 
 router.post('/signup', (req, res, next) => {
-  User.findOne({username: req.body.username})
-    .then((user) => {
-      if (user) {
-        let error = new Error(`User ${ req.body.username } already registered`);
-
-        error.status = 403;
-        next(error);
-      } else {
-        return User.create({
-          username: req.body.username,
-          password: req.body.password
-        });
-      }
-    })
-    .then((user) => {
-      res.status(200).json({
-        status: 'Registration successful',
-        user: user
-      });
-    }, (error) => {
-      next(error);
-    })
-    .catch((error) => {
-      next(error);
-    });
+    User.register(
+            new User({ username: req.body.username }),
+                        req.body.password, (err, user) => {
+                            if (err) {
+                                res.statusCode = 500;
+                                res.setHeader('Content-Type', 'application/json');
+                                res.json(err);
+                            } else {
+                                if (req.body.firstname)
+                                    user.firstname = req.body.firstname;
+                                if (req.body.lastname)
+                                    user.lastname = req.body.lastname;
+                                user.save((err, user) => {
+                                    if (err) {
+                                        res.statusCode = 500;
+                                        res.setHeader('Content-Type', 'application/json');
+                                        res.json(err);
+                                    }
+                                    passport.authenticate('local')(req, res, () => {
+                                        res.statusCode = 200;
+                                        res.setHeader('Content-Type', 'application/json');
+                                        res.json({ status: "Registration successfull", success: true })
+                                    });
+                                })
+                            }
+                        });
 });
 
-router.post('/login', (req, res, next) => {
-  if (req.session.user) {
-    res.status(200).json({
-      status: 'You are authenticated!'
+router.post('/login', passport.authenticate('local'), (req, res, next) => {
+    var token = authenticate.getToken({ _id: req.user._id });
+
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+            success: true,
+            token: token,
+            status: "You had successfully loggedin"
     });
-  } else {
-    User.findOne({username: req.body.username})
-      .then((user) => {
-        if (user) {
-          if (user.password === req.body.password) {
-            req.session.user = 'authenticated';
-            res.status(200).json({
-              status: 'You are authenticated!'
-            });
-          } else if (user.password !== req.body.password) {
-            let error = new Error('Your password is incorrect!');
 
-            error.status = 403;
-            return next(error);
-          }
-        } else {
-          let error = new Error(`Username ${ req.body.username } does not exists!`);
-
-          error.status = 403;
-          return next(error);
-        }
-      })
-      .catch((error) => {
-        next(error);
-      });
-  }
 });
 
-router.get('/logout', (req, res) => {
-  if (req.session) {
-    req.session.destroy();
-    res.clearCookie('session-id');
-    res.redirect('/');
-  } else {
-    let error = new Error(`You are not logged in`);
-
-    error.status = 403;
-    next(error);
-  }
+router.get('/logout', (req, res, next) => {
+    if (req.session) {
+        req.session.destroy();
+        res.clearCookie('session-id');
+        res.redirect('/');
+    } else {
+        var err = new Error('You are not logged in');
+        err.status = 403;
+        return next(err);
+    }
 });
 
 module.exports = router;
